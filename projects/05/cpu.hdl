@@ -1,0 +1,90 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    // C Instruction Breakdown
+    // 1xxaccccccdddjjj
+    // 1: indicates this is a C instruction (0 would indicate A)
+    // xx: is ignored
+    // a: is 0 when A register should feed ALU input, 1 if inM should feed ALU input
+    // 6 c bits: specify the calculation for the ALU to perform
+    // ddd: first and second code whether to store computed value in A register and D register, respectively. 
+    // Third d bit codes whether to store value in M
+    // jjj: Specify whether to jump in case ALU is negative, zero, or positive, respectively
+
+    PARTS:
+    // 111 a cccccc ddd jjj
+
+    // i  _  _  a  c1 c2 c3 c4 c5 c6 d1 d2 d3 j1 j2 j3
+    // 15 14 13 12 11 10 09 08 07 06 05 04 03 02 01 00
+
+    
+    Mux16(a=instruction, b=outalu, sel=instruction[15], out=outinstruction);
+
+    Register(in=outinstruction, load=instruction[5], out=outrega, out=addressM);
+
+    Register(in=outalu, load=instruction[4], out=outregd);
+
+    // Decode the a bit to decide if to use a value from memory (inM)
+    // Or to use output from A register / ALU out
+    Mux16(a=outrega, b=inM, sel=instruction[12], out=inalu);
+
+    ALU(x=outregd, 
+        y=inalu, 
+        zx=instruction[6], 
+        nx=instruction[7], 
+        zy=instruction[8], 
+        ny=instruction[9], 
+        f=instruction[10], 
+        no=instruction[11], 
+        out=outalu, 
+        out=outM,
+        out=out,
+        zr=outZr, 
+        ng=outNg);
+ 
+    // Jump if zero
+    And(a=instruction[13], b=outZr, out=jumpZr);
+    // Jump if negative
+    And(a=instruction[14], b=outNg, out=jumpNg);
+    
+    And(a=instruction[15], b=
+ 
+    Mux4Way16(a=outZr, 
+        b=outNg, 
+        c=outPos, 
+        d=false, 
+        sel=instruction[13..15], 
+        out=outjmp);
+
+    PC(in=outrega, load=outjmp, inc=pc, reset=reset, out=pc);
+}
